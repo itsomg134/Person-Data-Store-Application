@@ -1,0 +1,514 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Person Data Store</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .auth-section, .persons-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .permissions-display {
+            background: #e8f4fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .permission-badge {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        
+        input, select, button {
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            width: 50%;
+            border-radius: 8px;
+        }
+        
+        .close {
+            float: right;
+            cursor: pointer;
+            font-size: 24px;
+        }
+        
+        .error {
+            color: red;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Authentication Section -->
+        <div class="auth-section">
+            <h2>Authentication</h2>
+            <div id="loginForm">
+                <h3>Login</h3>
+                <input type="text" id="loginUsername" placeholder="Username">
+                <input type="password" id="loginPassword" placeholder="Password">
+                <button onclick="login()">Login</button>
+            </div>
+            
+            <div id="registerForm">
+                <h3>Register New User</h3>
+                <input type="text" id="regUsername" placeholder="Username">
+                <input type="password" id="regPassword" placeholder="Password">
+                <input type="text" id="regPermissions" placeholder="Permissions (comma-separated)">
+                <button onclick="register()">Register</button>
+            </div>
+            
+            <div id="userInfo" style="display: none;">
+                <h3>Logged in as: <span id="usernameDisplay"></span></h3>
+                <div id="permissionsDisplay" class="permissions-display"></div>
+                <button onclick="logout()">Logout</button>
+            </div>
+        </div>
+        
+        <!-- Persons Section -->
+        <div class="persons-section" id="personsSection" style="display: none;">
+            <h2>Person Data Store</h2>
+            
+            <div id="errorMessage" class="error" style="display: none;"></div>
+            
+            <div>
+                <button onclick="showAddPersonModal()" id="addPersonBtn" disabled>Add New Person</button>
+            </div>
+            
+            <table id="personsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Address</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="personsTableBody">
+                    <!-- Persons will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Add/Edit Person Modal -->
+    <div id="personModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3 id="modalTitle">Add Person</h3>
+            <form id="personForm">
+                <input type="hidden" id="personId">
+                <div>
+                    <label>Name:</label>
+                    <input type="text" id="personName" required>
+                </div>
+                <div>
+                    <label>Age:</label>
+                    <input type="number" id="personAge" required>
+                </div>
+                <div>
+                    <label>Email:</label>
+                    <input type="email" id="personEmail" required>
+                </div>
+                <div>
+                    <label>Phone:</label>
+                    <input type="text" id="personPhone">
+                </div>
+                <div>
+                    <label>Address:</label>
+                    <input type="text" id="personAddress">
+                </div>
+                <button type="submit">Save</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let currentUser = null;
+        let persons = [];
+        
+        // DOM Elements
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const userInfo = document.getElementById('userInfo');
+        const personsSection = document.getElementById('personsSection');
+        const addPersonBtn = document.getElementById('addPersonBtn');
+        const personsTableBody = document.getElementById('personsTableBody');
+        const errorMessage = document.getElementById('errorMessage');
+        const personModal = document.getElementById('personModal');
+        
+        // Check if user is already logged in
+        checkAuthStatus();
+        
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/user/permissions`, {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    updateUIForLoggedInUser(data);
+                }
+            } catch (error) {
+                console.log('Not authenticated');
+            }
+        }
+        
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateUIForLoggedInUser(data.user);
+                    showMessage('Login successful!', false);
+                } else {
+                    showMessage(data.error, true);
+                }
+            } catch (error) {
+                showMessage('Login failed: ' + error.message, true);
+            }
+        }
+        
+        async function register() {
+            const username = document.getElementById('regUsername').value;
+            const password = document.getElementById('regPassword').value;
+            const permissions = document.getElementById('regPermissions').value || 'read';
+            
+            try {
+                const response = await fetch(`${API_BASE}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, permissions }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Registration successful! Please login.', false);
+                    // Clear registration form
+                    document.getElementById('regUsername').value = '';
+                    document.getElementById('regPassword').value = '';
+                    document.getElementById('regPermissions').value = '';
+                } else {
+                    showMessage(data.error, true);
+                }
+            } catch (error) {
+                showMessage('Registration failed: ' + error.message, true);
+            }
+        }
+        
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                currentUser = null;
+                updateUIForLoggedOutUser();
+                showMessage('Logged out successfully', false);
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+        
+        function updateUIForLoggedInUser(user) {
+            currentUser = user;
+            
+            // Update UI
+            document.getElementById('usernameDisplay').textContent = user.username;
+            
+            // Display permissions
+            const permissionsDisplay = document.getElementById('permissionsDisplay');
+            permissionsDisplay.innerHTML = '<strong>Permissions:</strong> ';
+            
+            if (user.permissions) {
+                const permissions = Array.isArray(user.permissions) ? 
+                    user.permissions : user.permissions.split(',');
+                
+                permissions.forEach(perm => {
+                    const badge = document.createElement('span');
+                    badge.className = 'permission-badge';
+                    badge.textContent = perm;
+                    permissionsDisplay.appendChild(badge);
+                });
+            }
+            
+            // Show/hide sections
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'none';
+            userInfo.style.display = 'block';
+            personsSection.style.display = 'block';
+            
+            // Enable/disable buttons based on permissions
+            const hasCreatePermission = user.permissions.includes('create');
+            addPersonBtn.disabled = !hasCreatePermission;
+            
+            // Load persons
+            loadPersons();
+        }
+        
+        function updateUIForLoggedOutUser() {
+            currentUser = null;
+            
+            // Show/hide sections
+            loginForm.style.display = 'block';
+            registerForm.style.display = 'block';
+            userInfo.style.display = 'none';
+            personsSection.style.display = 'none';
+            
+            // Clear persons table
+            personsTableBody.innerHTML = '';
+        }
+        
+        async function loadPersons() {
+            try {
+                const response = await fetch(`${API_BASE}/persons`, {
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    persons = data.persons;
+                    renderPersonsTable();
+                } else {
+                    showMessage(data.error, true);
+                }
+            } catch (error) {
+                showMessage('Failed to load persons: ' + error.message, true);
+            }
+        }
+        
+        function renderPersonsTable() {
+            personsTableBody.innerHTML = '';
+            
+            // For operator - iterate through persons using for...of loop
+            for (const person of persons) {
+                const row = document.createElement('tr');
+                
+                // Check if current user can edit/delete this person
+                const canEdit = currentUser.permissions.includes('update') && 
+                    (person.created_by === currentUser.id || currentUser.permissions.includes('admin'));
+                const canDelete = currentUser.permissions.includes('delete') && 
+                    (person.created_by === currentUser.id || currentUser.permissions.includes('admin'));
+                
+                row.innerHTML = `
+                    <td>${person.id}</td>
+                    <td>${person.name}</td>
+                    <td>${person.age}</td>
+                    <td>${person.email}</td>
+                    <td>${person.phone || '-'}</td>
+                    <td>${person.address || '-'}</td>
+                    <td>
+                        <button onclick="showEditPersonModal(${person.id})" 
+                                ${canEdit ? '' : 'disabled'}>Edit</button>
+                        <button onclick="deletePerson(${person.id})" 
+                                ${canDelete ? '' : 'disabled'}>Delete</button>
+                    </td>
+                `;
+                
+                personsTableBody.appendChild(row);
+            }
+        }
+        
+        function showAddPersonModal() {
+            document.getElementById('modalTitle').textContent = 'Add Person';
+            document.getElementById('personForm').reset();
+            document.getElementById('personId').value = '';
+            personModal.style.display = 'block';
+        }
+        
+        function showEditPersonModal(id) {
+            const person = persons.find(p => p.id === id);
+            if (!person) return;
+            
+            document.getElementById('modalTitle').textContent = 'Edit Person';
+            document.getElementById('personId').value = person.id;
+            document.getElementById('personName').value = person.name;
+            document.getElementById('personAge').value = person.age;
+            document.getElementById('personEmail').value = person.email;
+            document.getElementById('personPhone').value = person.phone || '';
+            document.getElementById('personAddress').value = person.address || '';
+            
+            personModal.style.display = 'block';
+        }
+        
+        function closeModal() {
+            personModal.style.display = 'none';
+        }
+        
+        document.getElementById('personForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const personData = {
+                name: document.getElementById('personName').value,
+                age: parseInt(document.getElementById('personAge').value),
+                email: document.getElementById('personEmail').value,
+                phone: document.getElementById('personPhone').value || null,
+                address: document.getElementById('personAddress').value || null
+            };
+            
+            const personId = document.getElementById('personId').value;
+            const url = personId ? `${API_BASE}/persons/${personId}` : `${API_BASE}/persons`;
+            const method = personId ? 'PUT' : 'POST';
+            
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(personData),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    closeModal();
+                    showMessage(data.message, false);
+                    loadPersons();
+                } else {
+                    showMessage(data.error, true);
+                }
+            } catch (error) {
+                showMessage('Operation failed: ' + error.message, true);
+            }
+        });
+        
+        async function deletePerson(id) {
+            if (!confirm('Are you sure you want to delete this person?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/persons/${id}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, false);
+                    loadPersons();
+                } else {
+                    showMessage(data.error, true);
+                }
+            } catch (error) {
+                showMessage('Delete failed: ' + error.message, true);
+            }
+        }
+        
+        function showMessage(message, isError) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            errorMessage.style.backgroundColor = isError ? '#ffebee' : '#e8f5e9';
+            errorMessage.style.color = isError ? '#c62828' : '#2e7d32';
+            
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target === personModal) {
+                closeModal();
+            }
+        };
+    </script>
+</body>
+</html>
