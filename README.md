@@ -18,6 +18,8 @@ A secure person data management application with user authentication and permiss
 
 ## Tech Stack
 
+<img width="1880" height="972" alt="image" src="https://github.com/user-attachments/assets/453cafc1-f59b-4895-8c90-15f704771918" />
+
 ### Backend
 - **Python** with **Flask** web framework
 - **SQLAlchemy** ORM for database management
